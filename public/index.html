@@ -436,16 +436,17 @@
                 video.load();
             };
 
-            const stopClip = () => {
-                // Clear clip timeout
-                if (clipTimeout.current) {
-                    clearTimeout(clipTimeout.current);
-                    clipTimeout.current = null;
-                }
-                
-                videoRef.current.pause();
-                setIsPlaying(false);
-            };
+			const stopClip = () => {
+				if (clipTimeout.current) {
+					clearTimeout(clipTimeout.current);
+					clipTimeout.current = null;
+				}
+				
+				if (videoRef.current) {
+					videoRef.current.pause();
+				}
+				setIsPlaying(false);
+			};
 
             const handleAnswer = (movie) => {
                 stopClip();
@@ -496,37 +497,38 @@
                 }, 2500);
             };
 
-            const handleSaveScore = async () => {
-                if (playerName.trim()) {
-                    const success = await saveScore(playerName.trim(), score, difficulty, customTimer, totalGameTime);
-                    if (success) {
-                        setShowNameInput(false);
-                        setShowLeaderboard(true);
-                    }
-                }
-            };
-
-            const restartGame = () => {
-                stopClip();
-                if (timerInterval.current) {
-                    clearInterval(timerInterval.current);
-                }
-                if (clipTimeout.current) {
-                    clearTimeout(clipTimeout.current);
-                }
-                // Reset all game state
-                setGameState('start');
-                setCurrentRound(0);
-                setScore(0);
-                setPlayerName('');
-                setShowNameInput(false);
-                setShowLeaderboard(false);
-                setCurrentEpisode(null);
-                setChoices([]);
-                setIsPlaying(false);
-                setTimeRemaining(null);
-            };
-
+			const handleSaveScore = async () => {
+				if (playerName.trim()) {
+					// Difficulty multiplier: Easy=1.0, Medium=1.5, Hard=2.0
+					const difficultyMultiplier = difficulty === 'easy' ? 1.0 : difficulty === 'medium' ? 1.5 : 2.0;
+					const baseScore = (score * 100) - Math.floor(totalGameTime / 10);
+					const finalScore = Math.floor(baseScore * difficultyMultiplier);
+					
+					const success = await saveScore(playerName.trim(), score, difficulty, customTimer, totalGameTime);
+					if (success) {
+						setShowNameInput(false);
+						setShowLeaderboard(true);
+					}
+				}
+			};
+			const restartGame = () => {
+				if (clipTimeout.current) clearTimeout(clipTimeout.current);
+				if (timerInterval.current) clearInterval(timerInterval.current);
+				if (videoRef.current) {
+					videoRef.current.pause();
+				}
+				
+				setCurrentEpisode(null);
+				setChoices([]);
+				setIsPlaying(false);
+				setTimeRemaining(null);
+				setCurrentRound(0);
+				setScore(0);
+				setPlayerName('');
+				setShowNameInput(false);
+				setShowLeaderboard(false);
+				setGameState('start');
+			};
             const applyDifficultyPreset = (level) => {
                 setDifficulty(level);
                 if (level === 'easy') setCustomTimer(45);
@@ -714,22 +716,7 @@
                                             </button>
                                         ))}
                                     </div>
-                                    
-                                    <div className="border-t border-white border-opacity-20 pt-6">
-                                        <h4 className="text-white text-lg mb-4">Custom Timer: <span className="text-pink-300 font-bold">{customTimer}s</span></h4>
-                                        <input
-                                            type="range"
-                                            min="10"
-                                            max="60"
-                                            value={customTimer}
-                                            onChange={(e) => setCustomTimer(parseInt(e.target.value))}
-                                            className="w-full h-2 bg-white bg-opacity-20 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                        <div className="flex justify-between text-white text-opacity-60 text-sm mt-2">
-                                            <span>10s</span>
-                                            <span>60s</span>
-                                        </div>
-                                    </div>
+
                                 </div>
 
                                 <div className="flex gap-4 justify-center mb-8">

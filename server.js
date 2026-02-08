@@ -43,7 +43,6 @@ app.get('/api/plex/shows', async (req, res) => {
       return res.status(404).json({ error: 'No TV show library found in Plex' });
     }
 
-    // Get all shows first
     const showsResponse = await axios.get(
       `${PLEX_URL}/library/sections/${tvLibrary.key}/all`,
       {
@@ -55,8 +54,8 @@ app.get('/api/plex/shows', async (req, res) => {
     const shows = showsResponse.data.MediaContainer.Metadata || [];
     console.log(`Found ${shows.length} TV shows`);
 
-    // For each show, get all episodes (up to 50 shows to avoid timeout)
-    const episodePromises = shows.slice(0, 50).map(async (show) => {
+    // Get 3-5 random episodes from each show (no limit on shows)
+    const episodePromises = shows.map(async (show) => {
       try {
         const episodesResponse = await axios.get(
           `${PLEX_URL}/library/metadata/${show.ratingKey}/allLeaves`,
@@ -67,32 +66,40 @@ app.get('/api/plex/shows', async (req, res) => {
         );
         
         const episodes = episodesResponse.data.MediaContainer.Metadata || [];
+        if (episodes.length === 0) return [];
         
-        // Get random episode from this show
-        if (episodes.length === 0) return null;
+        // Get 3-5 random episodes from this show
+        const numEpisodes = Math.min(episodes.length, Math.floor(Math.random() * 3) + 3);
+        const selectedEpisodes = [];
+        const shuffled = [...episodes].sort(() => Math.random() - 0.5);
         
-        const randomEpisode = episodes[Math.floor(Math.random() * episodes.length)];
-        const partKey = randomEpisode.Media?.[0]?.Part?.[0]?.key;
+        for (let i = 0; i < numEpisodes; i++) {
+          const episode = shuffled[i];
+          const partKey = episode.Media?.[0]?.Part?.[0]?.key;
+          
+          if (partKey) {
+            selectedEpisodes.push({
+              id: episode.ratingKey,
+              showTitle: show.title,
+              episodeTitle: episode.title,
+              season: episode.parentIndex || null,
+              episode: episode.index || null,
+              year: show.year || null,
+              duration: episode.duration || null,
+              videoPath: partKey
+            });
+          }
+        }
         
-        if (!partKey) return null;
-        
-        return {
-          id: randomEpisode.ratingKey,
-          showTitle: show.title,
-          episodeTitle: randomEpisode.title,
-          season: randomEpisode.parentIndex || null,
-          episode: randomEpisode.index || null,
-          year: show.year || null,
-          duration: randomEpisode.duration || null,
-          videoPath: partKey
-        };
+        return selectedEpisodes;
       } catch (err) {
         console.error(`Error fetching episodes for ${show.title}:`, err.message);
-        return null;
+        return [];
       }
     });
 
-    const episodes = (await Promise.all(episodePromises)).filter(ep => ep !== null);
+    const episodeArrays = await Promise.all(episodePromises);
+    const episodes = episodeArrays.flat();
 
     console.log(`Found ${episodes.length} TV episodes from ${shows.length} shows`);
     res.json({ episodes: episodes });
@@ -200,18 +207,21 @@ app.post('/api/leaderboard', async (req, res) => {
   try {
     const { name, score, difficulty, timer, totalTime } = req.body;
     
-    if (!name || score === undefined || !difficulty || !timer || !totalTime) {
+    if (!name || score === undefined || !difficulty || !totalTime) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
     const leaderboard = await loadLeaderboard();
-    const compositeScore = (score * 100) - Math.floor(totalTime / 10);
+    
+    // Difficulty multiplier
+    const difficultyMultiplier = difficulty === 'easy' ? 1.0 : difficulty === 'medium' ? 1.5 : 2.0;
+    const baseScore = (score * 100) - Math.floor(totalTime / 10);
+    const compositeScore = Math.floor(baseScore * difficultyMultiplier);
     
     leaderboard.push({
       name: name.trim().substring(0, 20),
       score: score,
       difficulty: difficulty,
-      timer: timer,
       totalTime: Math.floor(totalTime),
       compositeScore: compositeScore,
       date: new Date().toISOString()
